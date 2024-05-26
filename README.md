@@ -18,5 +18,14 @@ ChatterBox is a real-time web chat application built using the MERN stack (Mongo
 5. Socket.io: Library for real-time WebSocket communication.
 
 ## Getting Started
-1. Clone the repository:
+
+## Prerequisites
+     Install Node.js version > 18.0
+## Installation
+     git clone https://github.com/pseudoVenkateshPrasad/chatterbox_server.git
+## Usage
+      npm install
+      npm start
+## Contact Me
+     venkatesh.prasad2096@gmail.com
    
