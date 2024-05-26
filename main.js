@@ -13,13 +13,12 @@ const server = createServer(app);
 const io = new Server(server);
 const port = process.env.PORT || 8080;
 
-// const io = new Server(server);
 
 // import files
 import "./config/connectDB.js";
 import userRoute from "./src/routes/user.route.js";
 
-app.use(cors());
+app.use(cors({ credentials: true, origin: 'http://localhost:3000' }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(morgan("dev"));

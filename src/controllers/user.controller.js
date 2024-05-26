@@ -1,7 +1,9 @@
 import User from "../models/users.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import { verifyToken } from "../middlewares/auth.js";
 
+// New User Registration Controller 
 export const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
@@ -10,15 +12,15 @@ export const register = async (req, res, next) => {
 
     if (getExistingUser) {
       return res
-        .status(200)
-        .json({ message: "User already exists", data: getExistingUser });
+        .status(400)
+        .json({ isSuccess: false, message: "User Already Exists !", data: getExistingUser });
     }
 
     let hashedPassword = await bcrypt.hash(password, 10);
-    
+
     let newPayload = {
       email,
-      password : hashedPassword,
+      password: hashedPassword,
       name
     }
 
@@ -26,16 +28,17 @@ export const register = async (req, res, next) => {
 
     if (createUser) {
       return res
-        .status(201)
-        .json({ message: "User Registered Successfully", data: createUser });
+        .status(201).json({ isSuccess: true, message: "User Registered Successfully !", data: createUser });
     } else {
-      res.status(500).json({ message: "error creating user" });
+      res.status(500).json({ isSuccess: false, message: "Error Creating User !" });
     }
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ isSuccess: false, message: err.message });
   }
 };
 
+
+// Existing User Login Controller
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -46,36 +49,95 @@ export const loginUser = async (req, res) => {
     let getExistingUser = await User.findOne({ email });
 
     if (!getExistingUser) {
-      return res.status(200).json({ message: "user not found" });
+      return res.status(400).json({ isSuccess: false, data: [], message: "User Not Found" });
     }
 
-    if(getExistingUser) {
+    if (getExistingUser) {
       let checkPassword = await bcrypt.compare(password, getExistingUser.password);
 
-      if(!checkPassword) {
-        return res.status(200).json({ message: "invalid password !" });
+      if (!checkPassword) {
+        return res.status(400).json({ isSuccess: false, data: [], message: "Invalid Password !" });
       }
     }
 
+    let jwtOptions = {
+      expiresIn: '1m'
+    }
 
-    let createToken = jwt.sign(
+    let accessToken = jwt.sign(
       {
         _id: getExistingUser._id,
         email: getExistingUser.email,
       },
-      process.env.secretKey
+      process.env.secretKey,
+      jwtOptions
     );
 
-    return res
-      .status(200)
+    let refreshToken = jwt.sign(
+      {
+        _id: getExistingUser._id,
+        email: getExistingUser.email,
+      },
+      process.env.secretKey);
+
+
+    res.cookie('accessToken', accessToken, { httpOnly: true, maxAge: 30000, path: '/' /* 1 minutes */ });
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, maxAge: 300000, path: '/' /* 5 min */ });
+    res.status(200)
       .json({
-        message: "User found",
+        isSuccess: true,
+        message: "User Details",
         userData: getExistingUser,
-        accessToken: createToken,
       });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ isSuccess: false, data: [], message: err.message });
   }
 };
 
-// export default register;
+export const generateNewAccessToken = async (req, res) => {
+
+  let refreshToken = req.cookies.refreshToken;
+  if (!refreshToken) return res.status(401).json({ isSuccess: false, message: "UnAuthorized! Token Not Found." });
+  try {
+    let checkTokenValidityAndGenerateAccessToken = await verifyToken(refreshToken);
+    if (checkTokenValidityAndGenerateAccessToken.expiredAt && checkTokenValidityAndGenerateAccessToken.message === "jwt expired") {
+      return res.status(401).json({ isSuccess: false, message: "Refresh Token Expired" });
+    }
+
+    let jwtOptions = {
+      expiresIn: '1m'
+    }
+
+    let newAccessToken = await jwt.sign(
+      {
+        _id: checkTokenValidityAndGenerateAccessToken._id,
+        email: checkTokenValidityAndGenerateAccessToken.email,
+      },
+      process.env.secretKey,
+      jwtOptions
+    );
+
+    res.cookie('accessToken', newAccessToken, { httpOnly: true, maxAge: 60000, path: '/' });
+    res
+      .status(200)
+      .json({
+        isSuccess: true,
+        message: "Access Token Renewed !"
+      });
+  } catch (error) {
+    return res.status(400).json({ isSuccess: false, message: "Error Verifying Token !" });
+  }
+}
+
+
+export const logoutUser = async (req, res) => {
+  let cookies = req.cookies;
+  try {
+    res.clearCookie('accessToken', "/");
+    res.clearCookie('refreshToken', "/");
+    res.status(200).json({ isSuccess: true, message: "Logged Out Successfully !" });
+  } catch (err) {
+    res.status(500).json({ isSuccess: false, message: "Server Error 500 !" });
+  }
+
+}
